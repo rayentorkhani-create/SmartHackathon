@@ -1,0 +1,7 @@
+﻿build/
+cmake-build-*/
+*.user
+*.user.*
+CMakeCache.txt
+CMakeFiles/
+smart_hackathon.db
