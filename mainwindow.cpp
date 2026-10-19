@@ -1,5 +1,4 @@
 
-
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
@@ -12,6 +11,8 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QCoreApplication>
+#include <QFile>
+#include <QDir>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -19,8 +20,12 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // Connexion à SQLite
-    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
+    // 1. Vérifier les drivers disponibles
+    QStringList drivers = QSqlDatabase::drivers();
+
+    // 2. Connexion à SQLite (configuration actuelle)
+    QSqlDatabase db =
+        QSqlDatabase::addDatabase("QSQLITE");
 
     QString cheminBase =
         QCoreApplication::applicationDirPath()
@@ -29,39 +34,36 @@ MainWindow::MainWindow(QWidget *parent)
     db.setDatabaseName(cheminBase);
 
     if (!db.open()) {
-        QString drivers = QSqlDatabase::drivers().join(", ");
-
         QMessageBox::critical(
             this,
-            "Erreur SQLite",
+            "Erreur de connexion",
             "Impossible d'ouvrir la base de données.\n\n"
                 + db.lastError().text()
                 + "\n\nDrivers disponibles : "
-                + (drivers.isEmpty() ? "aucun" : drivers)
+                + drivers.join(", ")
             );
-
         return;
     }
 
-    // Création de la table jury si elle n'existe pas
+    // 3. Créer la table jury si nécessaire
     QSqlQuery query;
 
     if (!query.exec(
             "CREATE TABLE IF NOT EXISTS jury ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "nom TEXT NOT NULL,"
-            "email TEXT NOT NULL)")) {
+            "email TEXT NOT NULL)"
+            )) {
 
         QMessageBox::critical(
             this,
             "Erreur SQL",
             query.lastError().text()
             );
-
         return;
     }
 
-    // Connexion des boutons de l'interface
+    // 4. Connecter les boutons
     connect(ui->boutonAjouter,
             &QPushButton::clicked,
             this,
@@ -108,16 +110,13 @@ void MainWindow::chargerJurys()
     }
 
     ui->tableauJurys->setColumnCount(3);
-
     ui->tableauJurys->setHorizontalHeaderLabels(
         {"ID", "Nom", "Email"}
         );
-
     ui->tableauJurys->setRowCount(0);
 
     while (query.next()) {
         int ligne = ui->tableauJurys->rowCount();
-
         ui->tableauJurys->insertRow(ligne);
 
         for (int col = 0; col < 3; ++col) {
@@ -140,16 +139,12 @@ void MainWindow::chargerJurys()
 // ==================================
 void MainWindow::ajouterJury()
 {
-    bool okNom;
-    bool okEmail;
+    bool okNom = false;
+    bool okEmail = false;
 
     QString nom = QInputDialog::getText(
-        this,
-        "Ajouter un jury",
-        "Nom :",
-        QLineEdit::Normal,
-        "",
-        &okNom
+        this, "Ajouter un jury", "Nom :",
+        QLineEdit::Normal, "", &okNom
         );
 
     if (!okNom)
@@ -166,12 +161,8 @@ void MainWindow::ajouterJury()
     }
 
     QString email = QInputDialog::getText(
-        this,
-        "Ajouter un jury",
-        "Email :",
-        QLineEdit::Normal,
-        "",
-        &okEmail
+        this, "Ajouter un jury", "Email :",
+        QLineEdit::Normal, "", &okEmail
         );
 
     if (!okEmail)
@@ -188,7 +179,6 @@ void MainWindow::ajouterJury()
     }
 
     QSqlQuery query;
-
     query.prepare(
         "INSERT INTO jury (nom, email) "
         "VALUES (:nom, :email)"
@@ -237,14 +227,11 @@ void MainWindow::modifierJury()
     QString ancienEmail =
         ui->tableauJurys->item(ligne, 2)->text();
 
-    bool ok;
+    bool ok = false;
 
     QString nom = QInputDialog::getText(
-        this, "Modifier le jury",
-        "Nom :",
-        QLineEdit::Normal,
-        ancienNom,
-        &ok
+        this, "Modifier le jury", "Nom :",
+        QLineEdit::Normal, ancienNom, &ok
         );
 
     if (!ok)
@@ -261,11 +248,8 @@ void MainWindow::modifierJury()
     }
 
     QString email = QInputDialog::getText(
-        this, "Modifier le jury",
-        "Email :",
-        QLineEdit::Normal,
-        ancienEmail,
-        &ok
+        this, "Modifier le jury", "Email :",
+        QLineEdit::Normal, ancienEmail, &ok
         );
 
     if (!ok)
@@ -282,7 +266,6 @@ void MainWindow::modifierJury()
     }
 
     QSqlQuery query;
-
     query.prepare(
         "UPDATE jury SET nom = :nom, email = :email "
         "WHERE id = :id"
@@ -326,23 +309,17 @@ void MainWindow::supprimerJury()
     int id = ui->tableauJurys->item(ligne, 0)
                  ->text().toInt();
 
-    QMessageBox::StandardButton reponse =
-        QMessageBox::question(
-            this,
-            "Confirmation",
-            "Voulez-vous supprimer ce jury ?",
-            QMessageBox::Yes | QMessageBox::No
-            );
+    auto reponse = QMessageBox::question(
+        this, "Confirmation",
+        "Voulez-vous supprimer ce jury ?",
+        QMessageBox::Yes | QMessageBox::No
+        );
 
     if (reponse != QMessageBox::Yes)
         return;
 
     QSqlQuery query;
-
-    query.prepare(
-        "DELETE FROM jury WHERE id = :id"
-        );
-
+    query.prepare("DELETE FROM jury WHERE id = :id");
     query.bindValue(":id", id);
 
     if (!query.exec()) {
@@ -370,7 +347,6 @@ void MainWindow::rechercherJury()
         ui->champRecherche->text().trimmed();
 
     QSqlQuery query;
-
     query.prepare(
         "SELECT id, nom, email FROM jury "
         "WHERE nom LIKE :nom ORDER BY nom"
@@ -390,13 +366,11 @@ void MainWindow::rechercherJury()
 
     while (query.next()) {
         int ligne = ui->tableauJurys->rowCount();
-
         ui->tableauJurys->insertRow(ligne);
 
         for (int col = 0; col < 3; ++col) {
             ui->tableauJurys->setItem(
-                ligne,
-                col,
+                ligne, col,
                 new QTableWidgetItem(
                     query.value(col).toString()
                     )
@@ -410,7 +384,6 @@ void MainWindow::rechercherJury()
 
 // ==================================
 // AFFECTER UNE EQUIPE A UN JURY
-// A COMPLETER SELON LA TABLE EQUIPE
 // ==================================
 void MainWindow::affecterEquipe()
 {
@@ -421,3 +394,4 @@ void MainWindow::affecterEquipe()
         "après vérification de la table des équipes."
         );
 }
+
